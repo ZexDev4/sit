@@ -155,6 +155,7 @@ def add_update():
     data = request.get_json()
     pesan = data.get('pesan')
     link = data.get('link')
+    v = data.get('v', '1')  # Versi, default 1.0
 
     if not all([pesan, link]):
         return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
@@ -164,7 +165,7 @@ def add_update():
     # Hanya satu dokumen, update jika ada, insert jika belum
     updates_col.update_one(
         {},
-        {'$set': {'pesan': pesan, 'link': link}},
+        {'$set': {'pesan': pesan, 'link': link, 'v': v}},
         upsert=True
     )
 
