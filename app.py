@@ -11,6 +11,8 @@ client = MongoClient(MONGO_URL)
 db = client["apikey_database"]
 collection = db["apikeys"]
 
+#
+
 # ✅ Buat koleksi dan index unik jika belum ada
 if "apikeys" not in db.list_collection_names():
     db.create_collection("apikeys")
@@ -51,6 +53,54 @@ def add_apikey():
 
     return jsonify({'status': 'success', 'message': 'API key added'})
 
+# ✅ Endpoint: Edit API key (harus ada admin headers)
+@app.route('/edit_apikey', methods=['POST'])
+def edit_apikey():
+    admin_key = request.headers.get('X-Admin-Key')
+    if admin_key != ADMIN_KEY:
+        return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
+
+    data = request.get_json()
+    apikey = data.get('apikey')
+    new_apikey = data.get('new_apikey')
+    limitup = data.get('limitup')
+    expired = data.get('expired')
+
+    if not all([apikey, new_apikey, limitup, expired]):
+        return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
+
+    try:
+        datetime.strptime(expired, DATE_FORMAT)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Invalid date format (dd-mm-yyyy)'}), 400
+
+    key_data = collection.find_one({'apikey': apikey})
+    if not key_data:
+        return jsonify({'status': 'error', 'message': 'API key not found'}), 404
+
+    # If apikey is changed, check for duplicate
+    if apikey != new_apikey and collection.find_one({'apikey': new_apikey}):
+        return jsonify({'status': 'error', 'message': 'New API key already exists'}), 409
+
+    collection.update_one(
+        {'apikey': apikey},
+        {'$set': {'apikey': new_apikey, 'limitup': int(limitup), 'expired': expired}}
+    )
+
+    return jsonify({'status': 'success', 'message': 'API key updated'})
+
+# ✅ Endpoint: List semua API key (harus ada admin headers)
+@app.route('/list_apikey', methods=['GET'])
+def list_apikey():
+    admin_key = request.headers.get('X-Admin-Key')
+    if admin_key != ADMIN_KEY:
+        return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
+
+    apikeys = []
+    for doc in collection.find({}, {'_id': 0}):
+        apikeys.append(doc)
+
+    return jsonify({'status': 'success', 'apikeys': apikeys})
 # ✅ Endpoint: Cek API key
 @app.route('/check_apikey', methods=['POST'])
 def check_apikey():
