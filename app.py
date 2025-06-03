@@ -144,5 +144,60 @@ def update_limit():
         'limitup': new_limit
     })
 
+
+# ✅ Endpoint: Tambah atau update data dengan parameter pesan dan link (admin only)
+@app.route('/add_update', methods=['POST'])
+def add_update():
+    admin_key = request.headers.get('X-Admin-Key')
+    if admin_key != ADMIN_KEY:
+        return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 403
+
+    data = request.get_json()
+    pesan = data.get('pesan')
+    link = data.get('link')
+
+    if not all([pesan, link]):
+        return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
+
+    # Simpan/update di koleksi baru bernama 'updates'
+    updates_col = db["updates"]
+    # Hanya satu dokumen, update jika ada, insert jika belum
+    updates_col.update_one(
+        {},
+        {'$set': {'pesan': pesan, 'link': link}},
+        upsert=True
+    )
+
+    return jsonify({'status': 'success', 'message': 'Update saved'})
+
+# ✅ Endpoint: Cek update, hanya jika apikey valid, tidak expired, dan limit > 0
+@app.route('/check_update', methods=['POST'])
+def check_update():
+    data = request.get_json()
+    apikey = data.get('apikey')
+
+    if not apikey:
+        return jsonify({'status': 'error', 'message': 'Missing apikey'}), 400
+
+    key_data = collection.find_one({'apikey': apikey})
+    if not key_data:
+        return jsonify({'status': 'error', 'message': 'API key not found'}), 404
+
+    expired_date = datetime.strptime(key_data['expired'], DATE_FORMAT)
+    now = datetime.now()
+    if expired_date < now:
+        return jsonify({'status': 'error', 'message': 'API key expired'}), 403
+
+    if key_data['limitup'] <= 0:
+        return jsonify({'status': 'error', 'message': 'Limit already 0'}), 403
+
+    updates_col = db["updates"]
+    update_data = updates_col.find_one({}, {'_id': 0})
+
+    if not update_data:
+        return jsonify({'status': 'error', 'message': 'No update found'}), 404
+
+    return jsonify({'status': 'success', 'update': update_data})
+
 # Untuk Vercel deployment
 app = app
